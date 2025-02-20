@@ -13,11 +13,16 @@ import math
 from concurrent.futures import CancelledError
 
 import anyio
-from asks.errors import BadStatus
 from async_generator import asynccontextmanager
 
 from .model import ChannelExit, StateError
-from .util import NumberTooShortError, NumberTooLongError, NumberTimeoutError, DigitTimeoutError
+from .util import (
+    NumberTooShortError,
+    NumberTooLongError,
+    NumberTimeoutError,
+    DigitTimeoutError,
+    BadStatus,
+)
 
 log = logging.getLogger(__name__)
 
@@ -28,9 +33,9 @@ __all__ = [
     "HangupBridgeState",
     "OutgoingChannelState",
     "DTMFHandler",
-    "EvtHandler",
+    # "EvtHandler",
     "as_task",
-    "as_handler_task",
+    # "as_handler_task",
     "SyncReadNumber",
     "AsyncReadNumber",
     "SyncPlay",
@@ -91,7 +96,9 @@ class DialFailed(RuntimeError):
 def as_task(proc):
     @functools.wraps(proc)
     async def worker(self, *a, **kw):
-        self.taskgroup.start_soon(functools.partial(proc, self, *a, **kw), name=proc.__name__)
+        self.taskgroup.start_soon(
+            functools.partial(proc, self, *a, **kw), name=proc.__name__
+        )
 
     assert inspect.iscoroutinefunction(proc)
     return worker
@@ -130,6 +137,7 @@ class BaseEvtHandler:
     class. It will be set once event processing is set up and the
     ``on_start`` handler has finished.
     """
+
     # Internally, start_task starts a separate task that enters this state machine's context.
     # Entering the context starts _run_with_taskgroup, which creates the
     # loop's task group and then executes .run, which loops over incoming
@@ -172,7 +180,7 @@ class BaseEvtHandler:
     # scope of runner wrapper
     _run_with_scope = None
 
-    def __init__(self, client, taskgroup=None, ready: anyio.abc.Event=None):
+    def __init__(self, client, taskgroup=None, ready: anyio.abc.Event = None):
         self.client = client
         self._base_tg = taskgroup or client.taskgroup
         self._ready = ready
@@ -191,7 +199,7 @@ class BaseEvtHandler:
 
     async def _task_setup(self):
         assert self._qw is None
-        self._qw,self._qr = anyio.create_memory_object_stream(20)
+        self._qw, self._qr = anyio.create_memory_object_stream(20)
 
     async def _task_teardown(self):
         if self._qw is not None:
@@ -241,7 +249,7 @@ class BaseEvtHandler:
                     if self._done is not None:
                         await self._done.wait()
                 if sc.cancel_called and not yielded:
-                    yield self # ugh
+                    yield self  # ugh
                 pass
 
     @property
@@ -252,7 +260,7 @@ class BaseEvtHandler:
         else:
             return self._tg
 
-    async def _run_with_tg(self, *, task_status = None):
+    async def _run_with_tg(self, *, task_status=None):
         try:
             async with anyio.create_task_group() as tg:
                 self._tg = tg
@@ -275,7 +283,7 @@ class BaseEvtHandler:
         This call cancels the main loop, if any, as well as the loop of any
         sub-event handlers which might be running.
         """
-        log.debug("TeardownRun %r < %r", self, getattr(self, '_prev', None))
+        log.debug("TeardownRun %r < %r", self, getattr(self, "_prev", None))
         if self._tg is not None:
             self._tg.cancel_scope.cancel()
 
@@ -314,7 +322,7 @@ class BaseEvtHandler:
     async def _dispatch(self, evt):
         typ = evt.type
         try:
-            handler = getattr(self, 'on_' + typ)
+            handler = getattr(self, "on_" + typ)
         except AttributeError:
             await self._handle_prev(evt)
             return
@@ -345,7 +353,7 @@ class BaseEvtHandler:
 
         Do not replace this method. Do not call it directly.
         """
-        log.debug("SetupRun %r < %r", self, getattr(self, '_prev', None))
+        log.debug("SetupRun %r < %r", self, getattr(self, "_prev", None))
         if task_status is not None:
             task_status.started()
         await self.on_start()
@@ -360,11 +368,11 @@ class BaseEvtHandler:
             await anyio.sleep(0.1)
             await self._proc_check.wait()
 
-    async def _process(self, evt: anyio.abc.Event=None):
+    async def _process(self, evt: anyio.abc.Event = None):
         if evt is not None:
             evt.set()
         try:
-            log.debug("StartRun %r < %r", self, getattr(self, '_prev', None))
+            log.debug("StartRun %r < %r", self, getattr(self, "_prev", None))
             while True:
                 self._n_proc += 1
                 try:
@@ -389,7 +397,7 @@ class BaseEvtHandler:
                         await self._handle_prev(evt)
 
         finally:
-            log.debug("StopRun %r < %r", self, getattr(self, '_prev', None))
+            log.debug("StopRun %r < %r", self, getattr(self, "_prev", None))
 
     async def get_event(self):
         """
@@ -427,7 +435,7 @@ class BaseEvtHandler:
     @property
     def ref(self):
         s = self
-        while s._src is None and getattr(s, '_prev', None) is not None:
+        while s._src is None and getattr(s, "_prev", None) is not None:
             s = s._prev
         if s._src is None:
             return None
@@ -437,12 +445,13 @@ class BaseEvtHandler:
     def ref_id(self):
         r = self.ref
         if r is None:
-            return '?'
+            return "?"
         return r.id
 
     def __repr__(self):
         return "<%s: %s>" % (
-            self.__class__.__name__, ','.join("%s=%s" % (a, b) for a, b in self._repr())
+            self.__class__.__name__,
+            ",".join("%s=%s" % (a, b) for a, b in self._repr()),
         )
 
     async def on_start(self):
@@ -482,6 +491,7 @@ class _EvtHandler(BaseEvtHandler):
     """
     common methods for AsyncEvtHandler and SyncEvtHandler
     """
+
     # The event handler we're leeching off of
     _prev = None
 
@@ -515,8 +525,7 @@ class _EvtHandler(BaseEvtHandler):
         return self._await().__await__()
 
     async def done(self, result=None):
-        """Signal that this event handler has finished with this result.
-        """
+        """Signal that this event handler has finished with this result."""
         if result is not None:
             self._result = result
         await super().done()
@@ -623,17 +632,17 @@ class DTMFHandler:
         """
 
         digit = evt.digit
-        if digit == '#':
-            digit = 'Pound'
-        elif digit == '*':
-            digit = 'Star'
-        proc = getattr(self, 'on_dtmf_' + digit, None)
-        if proc is None and digit >= '0' and digit <= '9':
-            proc = getattr(self, 'on_dtmf_digit', None)
-        if proc is None and digit >= 'A' and digit <= 'D':
-            proc = getattr(self, 'on_dtmf_letter', None)
+        if digit == "#":
+            digit = "Pound"
+        elif digit == "*":
+            digit = "Star"
+        proc = getattr(self, "on_dtmf_" + digit, None)
+        if proc is None and digit >= "0" and digit <= "9":
+            proc = getattr(self, "on_dtmf_digit", None)
+        if proc is None and digit >= "A" and digit <= "D":
+            proc = getattr(self, "on_dtmf_letter", None)
         if proc is None:
-            proc = getattr(self, 'on_dtmf', None)
+            proc = getattr(self, "on_dtmf", None)
 
         if proc is None:
             log.info("Unhandled DTMF %s on %s", evt.digit, self)
@@ -648,7 +657,9 @@ class DTMFHandler:
 class _ThingEvtHandler(BaseEvtHandler):
     async def run(self, *, task_status=None):
         if self._tg is None:
-            raise RuntimeError("I do not have a task group. Use 'async with' or 'start_task'.")
+            raise RuntimeError(
+                "I do not have a task group. Use 'async with' or 'start_task'."
+            )
         handler = self.ref.on_event("*", self.handle)
         try:
             await super().run(task_status=task_status)
@@ -658,7 +669,8 @@ class _ThingEvtHandler(BaseEvtHandler):
 
 class ChannelState(_ThingEvtHandler):
     """This is the generic state machine for a single channel."""
-    _src = 'channel'
+
+    _src = "channel"
     last_cause = None
 
     def __init__(self, channel):
@@ -699,7 +711,8 @@ class BridgeState(_ThingEvtHandler):
 
     The bridge is always auto-destroyed when its handler ends.
     """
-    _src = 'bridge'
+
+    _src = "bridge"
     TYPE = "mixing"
     calls = set()
     bridge = None
@@ -719,7 +732,7 @@ class BridgeState(_ThingEvtHandler):
         """
         s = object.__new__(cls)
         s.client = client
-        s._base_tg = kw.get('taskgroup', client.taskgroup)
+        s._base_tg = kw.get("taskgroup", client.taskgroup)
         s._bridge_args = dict(type=type, bridgeId=client.generate_id("B"))
         if name is not None:
             s._bridge_args["name"] = name
@@ -728,7 +741,9 @@ class BridgeState(_ThingEvtHandler):
 
     async def _task_setup(self):
         if self.bridge is None:
-            self.__init__(await self.client.bridges.create(**self._bridge_args), **self._bridge_kw)
+            self.__init__(
+                await self.client.bridges.create(**self._bridge_args), **self._bridge_kw
+            )
             del self._bridge_args
             del self._bridge_kw
         return await super()._task_setup()
@@ -767,12 +782,12 @@ class BridgeState(_ThingEvtHandler):
     async def _dial(self, State=ChannelState, **kw):
         """Helper to start a call"""
         ch_id = self.client.generate_id("C")
-        log.debug("DIAL %s", kw.get('endpoint', 'unknown'))
+        log.debug("DIAL %s", kw.get("endpoint", "unknown"))
         ch = await self.client.channels.originate(
             channelId=ch_id,
             app=self.client.app,
-            appArgs=["dialed", kw.get('endpoint', 'unknown')],
-            **kw
+            appArgs=["dialed", kw.get("endpoint", "unknown")],
+            **kw,
         )
         self.calls.add(ch)
         ch.remember()
@@ -826,7 +841,7 @@ class BridgeState(_ThingEvtHandler):
 
     async def on_StasisStart(self, evt):
         """Hook for channel creation. Connects the channel to this bridge.
-        
+
         Call when overriding!"""
         ch = evt.channel
         await self.bridge.addChannel(channel=ch.id)
@@ -864,12 +879,12 @@ class BridgeState(_ThingEvtHandler):
 
     def _add_monitor(self, ch):
         """Listen to non-bridge events on the channel"""
-        if not hasattr(ch, '_bridge_evt'):
+        if not hasattr(ch, "_bridge_evt"):
             ch._bridge_evt = ch.on_event("*", self._chan_evt)
 
     async def _chan_evt(self, evt):
         """Dispatcher for forwarding a channel's events to this bridge."""
-        if getattr(evt, 'bridge', None) is self:
+        if getattr(evt, "bridge", None) is self:
             log.debug("Dispatch hasBRIDGE:%s for %s", evt.type, self)
             return  # already calling us via regular dispatch
         await self.handle(evt)
@@ -920,7 +935,7 @@ class BridgeState(_ThingEvtHandler):
     async def _chan_dead(self, evt):
         ch = evt.channel
 
-        if not hasattr(ch, '_bridge_evt'):
+        if not hasattr(ch, "_bridge_evt"):
             return
 
         # remove the listener
@@ -978,7 +993,14 @@ class HangupBridgeState(BridgeState):
 
     async def on_channel_end(self, ch, evt=None):
         await super().on_channel_end(ch, evt)
-        if _count(1 for c in (self.bridge.channels | self.calls) if c.state in {'Up','Ringing'}) < 2:
+        if (
+            _count(
+                1
+                for c in (self.bridge.channels | self.calls)
+                if c.state in {"Up", "Ringing"}
+            )
+            < 2
+        ):
             for c in self.bridge.channels:
                 await c.hang_up()
             await self.done()
@@ -1063,14 +1085,14 @@ class _ReadNumber(DTMFHandler):
     _total_deadline = None
 
     def __init__(
-            self,
-            prev,
-            playback=None,
-            timeout=60,
-            first_digit_timeout=None,
-            digit_timeout=10,
-            max_len=15,
-            min_len=5
+        self,
+        prev,
+        playback=None,
+        timeout=60,
+        first_digit_timeout=None,
+        digit_timeout=10,
+        max_len=15,
+        min_len=5,
     ):
         if first_digit_timeout is None:
             first_digit_timeout = digit_timeout
@@ -1093,12 +1115,12 @@ class _ReadNumber(DTMFHandler):
         This method may call `await self.done` with the dialled number, update
         `self.num`, or raise an exception. A string is used to replace the
         current temporary number.
-        
+
         This method may be a coroutine.
         """
-        if digit == '*':
+        if digit == "*":
             self.num = ""
-        elif digit == '#':
+        elif digit == "#":
             if len(self.num) < self.min_len:
                 raise NumberTooShortError(self.num)
             await self.done(self.num)
@@ -1115,7 +1137,7 @@ class _ReadNumber(DTMFHandler):
             except BadStatus:
                 pass
 
-    async def _digit_timer_(self, evt: anyio.abc.Event=None):
+    async def _digit_timer_(self, evt: anyio.abc.Event = None):
         self._digit_deadline = self.first_digit_timeout + await anyio.current_time()
         with anyio.CancelScope() as sc:
             self._digit_timer = sc
@@ -1128,7 +1150,7 @@ class _ReadNumber(DTMFHandler):
                     raise DigitTimeoutError(self.num) from None
                 await anyio.sleep(delay)
 
-    async def _total_timer_(self, evt: anyio.abc.Event=None):
+    async def _total_timer_(self, evt: anyio.abc.Event = None):
         self._total_deadline = self.total_timeout + await anyio.current_time()
         with anyio.CancelScope() as sc:
             self._total_timer = sc
@@ -1166,8 +1188,9 @@ class _ReadNumber(DTMFHandler):
         await self.set_timeout()
 
     async def set_timeout(self):
-        self._digit_deadline = (await anyio.current_time()
-                                ) + (self.digit_timeout if self.num else self.first_digit_timeout)
+        self._digit_deadline = (await anyio.current_time()) + (
+            self.digit_timeout if self.num else self.first_digit_timeout
+        )
 
 
 class SyncReadNumber(_ReadNumber, SyncEvtHandler):
@@ -1177,6 +1200,7 @@ class SyncReadNumber(_ReadNumber, SyncEvtHandler):
 
     Sync version.
     """
+
     pass
 
 
@@ -1187,6 +1211,7 @@ class AsyncReadNumber(_ReadNumber, AsyncEvtHandler):
 
     Async version.
     """
+
     pass
 
 

@@ -23,9 +23,8 @@ import re
 from weakref import WeakValueDictionary
 
 import anyio
-from asks.errors import BadStatus
 
-from .util import mayNotExist
+from .util import mayNotExist, BadStatus
 
 log = logging.getLogger(__name__)
 
@@ -98,22 +97,24 @@ class Repository(object):
 
             async def __call__(self, **kwargs):
                 oper = getattr(self.p.api, self.item, None)
-                if not (hasattr(oper, '__call__') and hasattr(oper, 'json')):
-                    raise AttributeError("'%r' object has no attribute '%s'" % (self.p, self.item))
+                if not (hasattr(oper, "__call__") and hasattr(oper, "json")):
+                    raise AttributeError(
+                        "'%r' object has no attribute '%s'" % (self.p, self.item)
+                    )
                 jsc = oper.json
                 try:
                     res = await oper(**kwargs)
                 except BadStatus as exc:
-                    d = getattr(exc, 'data', None)
+                    d = getattr(exc, "data", None)
                     if d is not None:
-                        d = d.get('message', None)
+                        d = d.get("message", None)
                     raise OperationError(d) from exc
 
                 res = await promote(self.p.client, res, jsc)
                 return res
 
         return AttrOp(self, item)
-        #return lambda **kwargs: promote(self.client, oper(**kwargs), oper.json)
+        # return lambda **kwargs: promote(self.client, oper(**kwargs), oper.json)
 
 
 class ObjectIdGenerator(object):
@@ -150,7 +151,7 @@ class DefaultObjectIdGenerator(ObjectIdGenerator):
     :param id_field:    Name of the field to specify in JSON.
     """
 
-    def __init__(self, param_name, id_field='id'):
+    def __init__(self, param_name, id_field="id"):
         self.param_name = param_name
         self.id_field = id_field
 
@@ -258,7 +259,7 @@ class BaseObject(object):
 
     def _get_enriched(self, item):
         oper = getattr(self.api, item, None)
-        if not (hasattr(oper, '__call__') and hasattr(oper, 'json')):
+        if not (hasattr(oper, "__call__") and hasattr(oper, "json")):
             raise AttributeError("'%r' object has no attribute '%r'" % (self, item))
         jsc = oper.json
 
@@ -281,7 +282,7 @@ class BaseObject(object):
         return enrich_operation
 
     async def create(self, **k):
-        res = await self._get_enriched('create')(**k)
+        res = await self._get_enriched("create")(**k)
         type(res).active.add(res)
         return res
 
@@ -303,12 +304,10 @@ class BaseObject(object):
         self.event_listeners.setdefault(event_type, list()).append(callback_obj)
 
         class EventUnsubscriber(object):
-            """Class to allow events to be unsubscribed.
-            """
+            """Class to allow events to be unsubscribed."""
 
             def close(self_):
-                """Unsubscribe the associated event callback.
-                """
+                """Unsubscribe the associated event callback."""
                 try:
                     self.event_listeners[event_type].remove(callback_obj)
                 except ValueError:
@@ -318,7 +317,9 @@ class BaseObject(object):
 
     async def do_event(self, msg):
         """Run a message through this object's event queue/list"""
-        callbacks = self.event_listeners.get(msg.type, []) + self.event_listeners.get("*", [])
+        callbacks = self.event_listeners.get(msg.type, []) + self.event_listeners.get(
+            "*", []
+        )
         for p, a, k in callbacks:
             log.debug("RunCb:%s %s %s %s", self, p, a, k)
             r = p(msg, *a, **k)
@@ -333,7 +334,7 @@ class BaseObject(object):
 
     def __aiter__(self):
         if self._qr is None:
-            self._qw,self._qr = anyio.create_memory_object_stream(QLEN)
+            self._qw, self._qr = anyio.create_memory_object_stream(QLEN)
         return self
 
     async def __anext__(self):
@@ -368,7 +369,7 @@ class Channel(BaseObject):
     :param json: Instance data
     """
 
-    id_generator = DefaultObjectIdGenerator('channelId')
+    id_generator = DefaultObjectIdGenerator("channelId")
     api = "channels"
     bridge = None
     _do_hangup = None
@@ -495,7 +496,7 @@ class Channel(BaseObject):
             pass
         elif msg.type == "ChannelDtmfReceived":
             pass
-        elif msg.type in {"ChannelDialplan","ChannelVarset"}:
+        elif msg.type in {"ChannelDialplan", "ChannelVarset"}:
             pass
         else:
             log.warn("Event not recognized: %s for %s", msg, self)
@@ -503,6 +504,7 @@ class Channel(BaseObject):
 
     async def wait_up(self):
         prev = None
+
         def chk():
             nonlocal prev
             if prev is None:
@@ -579,7 +581,7 @@ class Bridge(BaseObject):
     reconnected to if your program is restarted.
     """
 
-    id_generator = DefaultObjectIdGenerator('bridgeId')
+    id_generator = DefaultObjectIdGenerator("bridgeId")
     api = "bridges"
 
     def _init(self):
@@ -622,7 +624,7 @@ class Bridge(BaseObject):
             log.warn("Event not recognized: %s for %s", msg, self)
         await super().do_event(msg)
 
-        if hasattr(msg, 'bridge'):
+        if hasattr(msg, "bridge"):
             for ch in self.channels - msg.bridge.channels:
                 log.warn("%s: %s not listed", self, ch)
             for ch in msg.bridge.channels - self.channels:
@@ -646,17 +648,18 @@ class Playback(BaseObject):
     ;param id: Instance ID, if JSON is not yet known
     :param json: Instance data
     """
-    id_generator = DefaultObjectIdGenerator('playbackId')
+
+    id_generator = DefaultObjectIdGenerator("playbackId")
     api = "playbacks"
     ref = None
 
     def _init(self):
         self._is_playing = anyio.Event()
         self._is_done = anyio.Event()
-        target = self.json.get('target_uri', '')
-        if target.startswith('channel:'):
+        target = self.json.get("target_uri", "")
+        if target.startswith("channel:"):
             self.ref = Channel(self.client, id=target[8:])
-        elif target.startswith('bridge:'):
+        elif target.startswith("bridge:"):
             self.ref = Bridge(self.client, id=target[7:])
 
     async def do_event(self, msg):
@@ -688,17 +691,18 @@ class LiveRecording(BaseObject):
     ;param id: Instance ID, if JSON is not yet known
     :param json: Instance data
     """
-    id_generator = DefaultObjectIdGenerator('recordingName', id_field='name')
+
+    id_generator = DefaultObjectIdGenerator("recordingName", id_field="name")
     api = "recordings"
     ref = None
 
     def _init(self):
         self._is_recording = anyio.Event()
         self._is_done = anyio.Event()
-        target = self.json.get('target_uri', '')
-        if target.startswith('channel:'):
+        target = self.json.get("target_uri", "")
+        if target.startswith("channel:"):
             self.ref = Channel(self.client, id=target[8:])
-        elif target.startswith('bridge:'):
+        elif target.startswith("bridge:"):
             self.ref = Bridge(self.client, id=target[7:])
 
     async def do_event(self, msg):
@@ -730,7 +734,8 @@ class StoredRecording(BaseObject):
     ;param id: Instance ID, if JSON is not yet known
     :param json: Instance data
     """
-    id_generator = DefaultObjectIdGenerator('recordingName', id_field='name')
+
+    id_generator = DefaultObjectIdGenerator("recordingName", id_field="name")
     api = "recordings"
 
     async def do_event(self, msg):
@@ -740,11 +745,10 @@ class StoredRecording(BaseObject):
 
 # noinspection PyDocstring
 class EndpointIdGenerator(ObjectIdGenerator):
-    """Id generator for endpoints, because they are weird.
-    """
+    """Id generator for endpoints, because they are weird."""
 
     def get_params(self, obj_json):
-        return {'tech': obj_json['technology'], 'resource': obj_json['resource']}
+        return {"tech": obj_json["technology"], "resource": obj_json["resource"]}
 
     def id_as_str(self, obj_json):
         return "%(tech)s/%(resource)s" % self.get_params(obj_json)
@@ -758,6 +762,7 @@ class Endpoint(BaseObject):
     ;param id: Instance ID, if JSON is not yet known
     :param json: Instance data
     """
+
     id_generator = EndpointIdGenerator()
     api = "endpoints"
 
@@ -774,7 +779,8 @@ class DeviceState(BaseObject):
     ;param id: Instance ID, if JSON is not yet known
     :param json: Instance data
     """
-    id_generator = DefaultObjectIdGenerator('deviceName', id_field='name')
+
+    id_generator = DefaultObjectIdGenerator("deviceName", id_field="name")
     endpoint = "deviceStates"
 
     async def do_event(self, msg):
@@ -791,7 +797,7 @@ class Sound(BaseObject):
     :param json: Instance data
     """
 
-    id_generator = DefaultObjectIdGenerator('soundId')
+    id_generator = DefaultObjectIdGenerator("soundId")
     endpoint = "sounds"
 
     async def do_event(self, msg):
@@ -808,7 +814,7 @@ class Mailbox(BaseObject):
     :param json: Instance data
     """
 
-    id_generator = DefaultObjectIdGenerator('mailboxName', id_field='name')
+    id_generator = DefaultObjectIdGenerator("mailboxName", id_field="name")
     endpoint = "mailboxes"
 
     async def do_event(self, msg):
@@ -838,9 +844,9 @@ async def promote(client, resp, operation_json):
     resp_json = json.loads(res)
     log.debug("resp=%s", resp_json)
 
-    response_class = operation_json['responseClass']
+    response_class = operation_json["responseClass"]
     is_list = False
-    m = re.match('''List\[(.*)\]''', response_class)
+    m = re.match("""List\[(.*)\]""", response_class)
     if m:
         response_class = m.group(1)
         is_list = True
@@ -854,12 +860,12 @@ async def promote(client, resp, operation_json):
 
 
 CLASS_MAP = {
-    'Bridge': Bridge,
-    'Channel': Channel,
-    'Endpoint': Endpoint,
-    'Playback': Playback,
-    'LiveRecording': LiveRecording,
-    'StoredRecording': StoredRecording,
-    'Mailbox': Mailbox,
-    'DeviceState': DeviceState,
+    "Bridge": Bridge,
+    "Channel": Channel,
+    "Endpoint": Endpoint,
+    "Playback": Playback,
+    "LiveRecording": LiveRecording,
+    "StoredRecording": StoredRecording,
+    "Mailbox": Mailbox,
+    "DeviceState": DeviceState,
 }

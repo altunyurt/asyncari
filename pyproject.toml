@@ -4,3 +4,31 @@ filename = "docs/source/history.rst"
 directory = "newsfragments"
 underlines = ["-", "~", "^"]
 issue_format = "`#{issue} <https://github.com/M-o-a-T/asyncari/issues/{issue}>`__"
+
+[project]
+name = "asyncari"
+version = "0.6.2"
+description = "Asterisk Resource Interface for Python Anyio "
+requires-python = ">=3.12"
+dependencies = [
+    "async-generator>=1.10",
+    "asyncswagger11>=0.12.4",
+    "asyncwebsockets>=0.9.4",
+    "httpx>=0.28.1",
+    "setuptools-scm>=8.1.0",
+]
+
+[build-system]
+requires = ["setuptools==68.2.2", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
+    "ipython>=8.32.0",
+    "python-lsp-ruff>=2.2.2",
+    "python-lsp-server>=1.12.2",
+    "ruff>=0.9.6",
+]
+
+[tool.setuptools_scm]

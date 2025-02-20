@@ -12,6 +12,7 @@ __all__ = [
     "TotalTimeoutError",
     "DigitTimeoutError",
     "mayNotExist",
+    "BadStatus",
 ]
 
 
@@ -54,8 +55,14 @@ class DigitTimeoutError(NumberTimeoutError):
     pass
 
 
-from asks.errors import BadStatus
 NOT_FOUND = 404
+
+
+class BadStatus(Exception):
+    def __init__(self, err, response, status_code=500):
+        super().__init__(err)
+        self.response = response
+        self.status_code = status_code
 
 
 @singleton
